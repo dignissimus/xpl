@@ -4,28 +4,25 @@ from typing import Optional, Callable
 
 
 def sum_over_squares(func: Callable) -> Callable:
-    _cache = {}
-
     @functools.wraps(func)
     def wrapper(
         board: chess.Board, sq: Optional[chess.Square] = None, *args, **kwargs
     ) -> int:
-        # Use board's transposition key + other args as a hashable cache key
-        board_key = board._transposition_key()
-        key = (board_key, sq, args, tuple(sorted(kwargs.items())))
+        if not hasattr(board, "_eval_cache"):
+            board._eval_cache = {}
         
-        if key in _cache:
-            return _cache[key]
+        # Unique key for this function and its arguments on this specific board instance
+        key = (func.__name__, sq, args, tuple(sorted(kwargs.items())))
+        
+        if key in board._eval_cache:
+            return board._eval_cache[key]
             
         if sq is None:
             res = sum(func(board, s, *args, **kwargs) for s in chess.SQUARES)
         else:
             res = func(board, sq, *args, **kwargs)
         
-        if len(_cache) > 10000:
-            _cache.clear()
-            
-        _cache[key] = res
+        board._eval_cache[key] = res
         return res
 
     return wrapper
@@ -45,26 +42,14 @@ def make_sq(x: int, y: int) -> Optional[chess.Square]:
     return None
 
 
-_get_p_cache = {}
-
 def get_p(board: chess.Board, x: int, y: int) -> Optional[chess.Piece]:
-    # Use the same transposition key strategy
-    board_key = board._transposition_key()
-    key = (board_key, x, y)
-    
-    if key in _get_p_cache:
-        return _get_p_cache[key]
-
     if 0 <= x <= 7 and 0 <= y <= 7:
-        res = board.piece_at(chess.square(x, 7 - y))
-    else:
-        res = None
-        
-    if len(_get_p_cache) > 20000:
-        _get_p_cache.clear()
-        
-    _get_p_cache[key] = res
-    return res
+        if not hasattr(board, "_get_p_cache"):
+            board._get_p_cache = {}
+        if (x, y) not in board._get_p_cache:
+            board._get_p_cache[(x, y)] = board.piece_at(chess.square(x, 7 - y))
+        return board._get_p_cache[(x, y)]
+    return None
 
 
 def is_white(p: Optional[chess.Piece], pt: Optional[chess.PieceType] = None) -> bool:
